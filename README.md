@@ -17,3 +17,4 @@ Stack
 - TypeScript
 - Tailwind CSS
 - Notion API
+- Mongo DB
