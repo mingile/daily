@@ -158,7 +158,10 @@ export default function HomePage() {
       const response = await fetch("/api/notion/connection");
       const data = await response.json();
 
-      if (data.notionConnected !== undefined && data.dbConnected !== undefined) {
+      if (
+        data.notionConnected !== undefined &&
+        data.dbConnected !== undefined
+      ) {
         setNotionConnection({
           loading: false,
           notionConnected: data.notionConnected,
@@ -491,9 +494,7 @@ export default function HomePage() {
                 <div className="flex items-center justify-center gap-2">
                   <Badge
                     variant={
-                      notionConnection.notionConnected
-                        ? "default"
-                        : "secondary"
+                      notionConnection.notionConnected ? "default" : "secondary"
                     }
                     className={
                       notionConnection.notionConnected
@@ -826,53 +827,46 @@ function MealCard({
       }`}
     >
       <CardHeader className="pb-4">
-        <div className="flex items-center justify-between">
-          <CardTitle className="text-stone-800 text-lg">{label}</CardTitle>
-          <div className="flex items-center gap-2">
-            <Checkbox
-              id={`${mealType}-completed`}
-              checked={completed}
-              onCheckedChange={onToggleCompleted}
-              className="border-stone-300"
-            />
-            <Label
-              htmlFor={`${mealType}-completed`}
-              className="text-xs text-stone-600 cursor-pointer"
-            >
-              완료
-            </Label>
-          </div>
-        </div>
+        <CardTitle className="text-stone-800 text-lg">{label}</CardTitle>
       </CardHeader>
       <CardContent>
         {completed ? (
-          <div className="space-y-3">
-            {items.length > 0 || medications.length > 0 ? (
-              <>
-                {items.length > 0 && (
-                  <div>
-                    <p className="text-xs text-stone-500 mb-1.5">식단</p>
-                    <p className="text-sm text-stone-700">
-                      {items
-                        .map(
-                          (item) => `${item.name} ${item.amount}${item.unit}`,
-                        )
-                        .join(", ")}
-                    </p>
-                  </div>
-                )}
-                {medications.length > 0 && (
-                  <div>
-                    <p className="text-xs text-stone-500 mb-1.5">약</p>
-                    <p className="text-sm text-amber-700">
-                      {medications.join(", ")}
-                    </p>
-                  </div>
-                )}
-              </>
-            ) : (
-              <p className="text-sm text-stone-400">기록 없음</p>
-            )}
+          <div className="space-y-4">
+            <div className="space-y-3">
+              {items.length > 0 || medications.length > 0 ? (
+                <>
+                  {items.length > 0 && (
+                    <div>
+                      <p className="text-xs text-stone-500 mb-1.5">식단</p>
+                      <p className="text-sm text-stone-700">
+                        {items
+                          .map(
+                            (item) => `${item.name} ${item.amount}${item.unit}`,
+                          )
+                          .join(", ")}
+                      </p>
+                    </div>
+                  )}
+                  {medications.length > 0 && (
+                    <div>
+                      <p className="text-xs text-stone-500 mb-1.5">약</p>
+                      <p className="text-sm text-amber-700">
+                        {medications.join(", ")}
+                      </p>
+                    </div>
+                  )}
+                </>
+              ) : (
+                <p className="text-sm text-stone-400">기록 없음</p>
+              )}
+            </div>
+            <Button
+              onClick={onToggleCompleted}
+              variant="outline"
+              className="w-full h-10 border-stone-300 text-stone-700 hover:bg-stone-100"
+            >
+              수정
+            </Button>
           </div>
         ) : (
           <div className="space-y-5">
@@ -1008,6 +1002,31 @@ function MealCard({
                 </div>
               </div>
             )}
+            {recentFoods.length > 0 && (
+              <div className="pt-4 border-t border-stone-200">
+                <div className="mb-3">
+                  <p className="text-xs font-medium text-stone-600">
+                    최근 음식
+                  </p>
+                </div>
+                {isLoadingRecentFoods ? (
+                  <div className="text-xs text-stone-500">불러오는 중...</div>
+                ) : (
+                  <div className="flex flex-wrap gap-2">
+                    {recentFoods.map((food, idx) => (
+                      <button
+                        key={idx}
+                        onClick={() => handleRecentFoodClick(food)}
+                        className="px-3 py-1.5 text-xs bg-stone-50 hover:bg-stone-100 border border-stone-200 rounded-md text-stone-700 transition-colors"
+                      >
+                        {food.name} {food.amount}
+                        {food.unit}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
 
             <div className="pt-4 border-t border-stone-200 space-y-3">
               <Label className="text-stone-700 text-sm font-medium block">
@@ -1097,31 +1116,12 @@ function MealCard({
               )}
             </div>
 
-            {recentFoods.length > 0 && (
-              <div className="pt-4 border-t border-stone-200">
-                <div className="mb-3">
-                  <p className="text-xs font-medium text-stone-600">
-                    최근 음식
-                  </p>
-                </div>
-                {isLoadingRecentFoods ? (
-                  <div className="text-xs text-stone-500">불러오는 중...</div>
-                ) : (
-                  <div className="flex flex-wrap gap-2">
-                    {recentFoods.map((food, idx) => (
-                      <button
-                        key={idx}
-                        onClick={() => handleRecentFoodClick(food)}
-                        className="px-3 py-1.5 text-xs bg-stone-50 hover:bg-stone-100 border border-stone-200 rounded-md text-stone-700 transition-colors"
-                      >
-                        {food.name} {food.amount}
-                        {food.unit}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
+            <Button
+              onClick={onToggleCompleted}
+              className="w-full h-10 bg-stone-700 hover:bg-stone-800 text-white"
+            >
+              완료
+            </Button>
           </div>
         )}
       </CardContent>
