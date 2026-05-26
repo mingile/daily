@@ -42,6 +42,60 @@ const MEAL_LABELS: Record<MealType, string> = {
   dinner: "저녁",
 };
 
+const MEAL_COMPLETION_KEY = "daily.mealCompletion.v1";
+
+function loadMealCompletion(date: string): MealCompletionState {
+  try {
+    const stored = localStorage.getItem(MEAL_COMPLETION_KEY);
+    if (!stored) {
+      return { breakfast: false, lunch: false, dinner: false };
+    }
+
+    const data = JSON.parse(stored);
+    const dateData = data[date];
+
+    if (!dateData) {
+      return { breakfast: false, lunch: false, dinner: false };
+    }
+
+    return {
+      breakfast: dateData.breakfast ?? false,
+      lunch: dateData.lunch ?? false,
+      dinner: dateData.dinner ?? false,
+    };
+  } catch (error) {
+    console.error("Failed to load meal completion:", error);
+    return { breakfast: false, lunch: false, dinner: false };
+  }
+}
+
+function saveMealCompletion(date: string, state: MealCompletionState) {
+  try {
+    const stored = localStorage.getItem(MEAL_COMPLETION_KEY);
+    const data = stored ? JSON.parse(stored) : {};
+
+    data[date] = state;
+
+    const sevenDaysAgo = getDateString(new Date(date), -7);
+    const cleaned = Object.fromEntries(
+      Object.entries(data).filter(([key]) => key >= sevenDaysAgo)
+    );
+
+    localStorage.setItem(MEAL_COMPLETION_KEY, JSON.stringify(cleaned));
+  } catch (error) {
+    console.error("Failed to save meal completion:", error);
+  }
+}
+
+function getDateString(baseDate: Date, offsetDays: number = 0): string {
+  const date = new Date(baseDate);
+  date.setDate(date.getDate() + offsetDays);
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
 function serializeFoodItems(items: FoodItem[]): string {
   return items
     .map((item) => `${item.name} ${item.amount}${item.unit}`)
@@ -287,6 +341,11 @@ export default function HomePage() {
     fetchRecentMedications,
   ]);
 
+  useEffect(() => {
+    const loaded = loadMealCompletion(todayStr);
+    setMealCompletion(loaded);
+  }, [todayStr]);
+
   const handleAddFood = (mealType: MealType, food: FoodItem) => {
     setDailyLog((prev) => ({
       ...prev,
@@ -332,10 +391,14 @@ export default function HomePage() {
   };
 
   const handleToggleMealCompletion = (mealType: MealType) => {
-    setMealCompletion((prev) => ({
-      ...prev,
-      [mealType]: !prev[mealType],
-    }));
+    setMealCompletion((prev) => {
+      const nextState = {
+        ...prev,
+        [mealType]: !prev[mealType],
+      };
+      saveMealCompletion(todayStr, nextState);
+      return nextState;
+    });
   };
 
   const handleNotionConnect = () => {
@@ -839,8 +902,8 @@ function MealCard({
                     <div>
                       <p className="text-xs text-stone-500 mb-1.5">식단</p>
                       <p className="text-sm text-stone-700">
-                        {items
-                          .map(
+                        {
+                          items.map(
                             (item) => `${item.name} ${item.amount}${item.unit}`,
                           )
                           .join(", ")}
