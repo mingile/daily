@@ -76,16 +76,19 @@ export default function HomePage() {
   const today = new Date();
   const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
 
-  const [dailyLog, setDailyLog] = useState<DailyLog>({
-    date: todayStr,
-    breakfast: [],
-    lunch: [],
-    dinner: [],
-    breakfastMedications: [],
-    lunchMedications: [],
-    dinnerMedications: [],
-    workout: false,
-    memo: "",
+  const [dailyLog, setDailyLog] = useState<DailyLog>(() => {
+    const loaded = loadDailyState(todayStr);
+    return {
+      date: todayStr,
+      breakfast: loaded.breakfast,
+      lunch: loaded.lunch,
+      dinner: loaded.dinner,
+      breakfastMedications: loaded.breakfastMedications,
+      lunchMedications: loaded.lunchMedications,
+      dinnerMedications: loaded.dinnerMedications,
+      workout: loaded.workout,
+      memo: loaded.memo,
+    };
   });
 
   const [isDailyLogLoading, setIsDailyLogLoading] = useState(false);
@@ -97,11 +100,12 @@ export default function HomePage() {
   const [recentMedications, setRecentMedications] = useState<string[]>([]);
   const [isLoadingRecentMedications, setIsLoadingRecentMedications] =
     useState(false);
-  const [mealCompletion, setMealCompletion] = useState<MealCompletionState>({
-    breakfast: false,
-    lunch: false,
-    dinner: false,
-  });
+  const [mealCompletion, setMealCompletion] = useState<MealCompletionState>(
+    () => {
+      const loaded = loadDailyState(todayStr);
+      return loaded.mealCompletion;
+    },
+  );
   const [notionConnection, setNotionConnection] = useState<{
     loading: boolean;
     notionConnected: boolean;
@@ -285,23 +289,6 @@ export default function HomePage() {
     fetchRecentFoods,
     fetchRecentMedications,
   ]);
-
-  useEffect(() => {
-    const loaded = loadDailyState(todayStr);
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setMealCompletion(loaded.mealCompletion);
-    setDailyLog((prev) => ({
-      ...prev,
-      breakfast: loaded.breakfast,
-      lunch: loaded.lunch,
-      dinner: loaded.dinner,
-      breakfastMedications: loaded.breakfastMedications,
-      lunchMedications: loaded.lunchMedications,
-      dinnerMedications: loaded.dinnerMedications,
-      workout: loaded.workout,
-      memo: loaded.memo,
-    }));
-  }, [todayStr]);
 
   const handleAddFood = (mealType: MealType, food: FoodItem) => {
     setDailyLog((prev) => ({
@@ -508,7 +495,7 @@ export default function HomePage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#f5f3ef] py-8 px-4 pb-24">
+    <div key={todayStr} className="min-h-screen bg-[#f5f3ef] py-8 px-4 pb-24">
       <div className="max-w-[480px] mx-auto space-y-6">
         <header className="text-center space-y-3 px-4">
           <h1 className="text-3xl font-semibold text-stone-800">daily</h1>
