@@ -9,6 +9,11 @@ import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
 import { X, Minus, Plus } from "lucide-react";
+import {
+  loadDailyState,
+  saveDailyState,
+  type MealCompletionState,
+} from "@/lib/dailyStateStorage";
 
 type FoodItem = {
   name: string;
@@ -30,71 +35,11 @@ type DailyLog = {
   memo: string;
 };
 
-type MealCompletionState = {
-  breakfast: boolean;
-  lunch: boolean;
-  dinner: boolean;
-};
-
 const MEAL_LABELS: Record<MealType, string> = {
   breakfast: "아침",
   lunch: "점심",
   dinner: "저녁",
 };
-
-const MEAL_COMPLETION_KEY = "daily.mealCompletion.v1";
-
-function loadMealCompletion(date: string): MealCompletionState {
-  try {
-    const stored = localStorage.getItem(MEAL_COMPLETION_KEY);
-    if (!stored) {
-      return { breakfast: false, lunch: false, dinner: false };
-    }
-
-    const data = JSON.parse(stored);
-    const dateData = data[date];
-
-    if (!dateData) {
-      return { breakfast: false, lunch: false, dinner: false };
-    }
-
-    return {
-      breakfast: dateData.breakfast ?? false,
-      lunch: dateData.lunch ?? false,
-      dinner: dateData.dinner ?? false,
-    };
-  } catch (error) {
-    console.error("Failed to load meal completion:", error);
-    return { breakfast: false, lunch: false, dinner: false };
-  }
-}
-
-function saveMealCompletion(date: string, state: MealCompletionState) {
-  try {
-    const stored = localStorage.getItem(MEAL_COMPLETION_KEY);
-    const data = stored ? JSON.parse(stored) : {};
-
-    data[date] = state;
-
-    const sevenDaysAgo = getDateString(new Date(date), -7);
-    const cleaned = Object.fromEntries(
-      Object.entries(data).filter(([key]) => key >= sevenDaysAgo)
-    );
-
-    localStorage.setItem(MEAL_COMPLETION_KEY, JSON.stringify(cleaned));
-  } catch (error) {
-    console.error("Failed to save meal completion:", error);
-  }
-}
-
-function getDateString(baseDate: Date, offsetDays: number = 0): string {
-  const date = new Date(baseDate);
-  date.setDate(date.getDate() + offsetDays);
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
-}
 
 function serializeFoodItems(items: FoodItem[]): string {
   return items
@@ -342,8 +287,20 @@ export default function HomePage() {
   ]);
 
   useEffect(() => {
-    const loaded = loadMealCompletion(todayStr);
-    setMealCompletion(loaded);
+    const loaded = loadDailyState(todayStr);
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setMealCompletion(loaded.mealCompletion);
+    setDailyLog((prev) => ({
+      ...prev,
+      breakfast: loaded.breakfast,
+      lunch: loaded.lunch,
+      dinner: loaded.dinner,
+      breakfastMedications: loaded.breakfastMedications,
+      lunchMedications: loaded.lunchMedications,
+      dinnerMedications: loaded.dinnerMedications,
+      workout: loaded.workout,
+      memo: loaded.memo,
+    }));
   }, [todayStr]);
 
   const handleAddFood = (mealType: MealType, food: FoodItem) => {
@@ -396,7 +353,17 @@ export default function HomePage() {
         ...prev,
         [mealType]: !prev[mealType],
       };
-      saveMealCompletion(todayStr, nextState);
+      saveDailyState(todayStr, {
+        mealCompletion: nextState,
+        workout: dailyLog.workout,
+        memo: dailyLog.memo,
+        breakfast: dailyLog.breakfast,
+        lunch: dailyLog.lunch,
+        dinner: dailyLog.dinner,
+        breakfastMedications: dailyLog.breakfastMedications,
+        lunchMedications: dailyLog.lunchMedications,
+        dinnerMedications: dailyLog.dinnerMedications,
+      });
       return nextState;
     });
   };
@@ -718,12 +685,24 @@ export default function HomePage() {
               <Checkbox
                 id="workout"
                 checked={dailyLog.workout}
-                onCheckedChange={(checked) =>
+                onCheckedChange={(checked) => {
+                  const newWorkout = checked === true;
                   setDailyLog((prev) => ({
                     ...prev,
-                    workout: checked === true,
-                  }))
-                }
+                    workout: newWorkout,
+                  }));
+                  saveDailyState(todayStr, {
+                    mealCompletion,
+                    workout: newWorkout,
+                    memo: dailyLog.memo,
+                    breakfast: dailyLog.breakfast,
+                    lunch: dailyLog.lunch,
+                    dinner: dailyLog.dinner,
+                    breakfastMedications: dailyLog.breakfastMedications,
+                    lunchMedications: dailyLog.lunchMedications,
+                    dinnerMedications: dailyLog.dinnerMedications,
+                  });
+                }}
                 className="border-stone-300"
               />
               <Label
@@ -746,6 +725,19 @@ export default function HomePage() {
               onChange={(e) =>
                 setDailyLog((prev) => ({ ...prev, memo: e.target.value }))
               }
+              onBlur={() => {
+                saveDailyState(todayStr, {
+                  mealCompletion,
+                  workout: dailyLog.workout,
+                  memo: dailyLog.memo,
+                  breakfast: dailyLog.breakfast,
+                  lunch: dailyLog.lunch,
+                  dinner: dailyLog.dinner,
+                  breakfastMedications: dailyLog.breakfastMedications,
+                  lunchMedications: dailyLog.lunchMedications,
+                  dinnerMedications: dailyLog.dinnerMedications,
+                });
+              }}
               placeholder="오늘 하루를 기록해보세요"
               className="min-h-[100px] border-stone-200 focus-visible:border-stone-400 focus-visible:ring-stone-300 resize-none"
             />
@@ -902,8 +894,8 @@ function MealCard({
                     <div>
                       <p className="text-xs text-stone-500 mb-1.5">식단</p>
                       <p className="text-sm text-stone-700">
-                        {
-                          items.map(
+                        {items
+                          .map(
                             (item) => `${item.name} ${item.amount}${item.unit}`,
                           )
                           .join(", ")}
