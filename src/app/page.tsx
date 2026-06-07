@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
-import { X, Minus, Plus } from "lucide-react";
+import { X, Minus, Plus, Check } from "lucide-react";
 import {
   loadDailyState,
   saveDailyState,
@@ -949,7 +949,18 @@ function MealCard({
       }`}
     >
       <CardHeader className="pb-4">
-        <CardTitle className="text-stone-800 text-lg">{label}</CardTitle>
+        <div className="flex items-center justify-between">
+          <CardTitle className="text-stone-800 text-lg">{label}</CardTitle>
+          {!completed && (
+            <button
+              onClick={onToggleCompleted}
+              className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-stone-500 bg-stone-100 hover:bg-green-100 hover:text-green-700 rounded-md transition-colors"
+            >
+              <Check className="w-3.5 h-3.5" />
+              완료
+            </button>
+          )}
+        </div>
       </CardHeader>
       <CardContent>
         {completed ? (
@@ -1237,13 +1248,6 @@ function MealCard({
                 </div>
               )}
             </div>
-
-            <Button
-              onClick={onToggleCompleted}
-              className="w-full h-10 bg-stone-700 hover:bg-stone-800 text-white"
-            >
-              완료
-            </Button>
           </div>
         )}
       </CardContent>
