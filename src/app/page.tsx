@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -72,25 +72,32 @@ function parseFoodItems(mealString: string): FoodItem[] {
   return items;
 }
 
-export default function HomePage() {
+function getTodayString(): string {
   const today = new Date();
-  const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+  return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+}
 
-  const [dailyLog, setDailyLog] = useState<DailyLog>(() => {
-    const loaded = loadDailyState(todayStr);
-    return {
-      date: todayStr,
-      breakfast: loaded.breakfast,
-      lunch: loaded.lunch,
-      dinner: loaded.dinner,
-      breakfastMedications: loaded.breakfastMedications,
-      lunchMedications: loaded.lunchMedications,
-      dinnerMedications: loaded.dinnerMedications,
-      workout: loaded.workout,
-      memo: loaded.memo,
-    };
-  });
+const DEFAULT_DAILY_LOG: DailyLog = {
+  date: "",
+  breakfast: [],
+  lunch: [],
+  dinner: [],
+  breakfastMedications: [],
+  lunchMedications: [],
+  dinnerMedications: [],
+  workout: false,
+  memo: "",
+};
 
+const DEFAULT_MEAL_COMPLETION: MealCompletionState = {
+  breakfast: false,
+  lunch: false,
+  dinner: false,
+};
+
+export default function HomePage() {
+  const [todayStr, setTodayStr] = useState("");
+  const [dailyLog, setDailyLog] = useState<DailyLog>(DEFAULT_DAILY_LOG);
   const [isDailyLogLoading, setIsDailyLogLoading] = useState(false);
   const [loadError, setLoadError] = useState("");
   const [isSaving, setIsSaving] = useState(false);
@@ -101,11 +108,9 @@ export default function HomePage() {
   const [isLoadingRecentMedications, setIsLoadingRecentMedications] =
     useState(false);
   const [mealCompletion, setMealCompletion] = useState<MealCompletionState>(
-    () => {
-      const loaded = loadDailyState(todayStr);
-      return loaded.mealCompletion;
-    },
+    DEFAULT_MEAL_COMPLETION,
   );
+  const [isMounted, setIsMounted] = useState(false);
   const [notionConnection, setNotionConnection] = useState<{
     loading: boolean;
     notionConnected: boolean;
@@ -123,6 +128,29 @@ export default function HomePage() {
   const [selectedDatabaseId, setSelectedDatabaseId] = useState<string>("");
   const [isConnectingDb, setIsConnectingDb] = useState(false);
   const [dbConnectError, setDbConnectError] = useState("");
+  const widgetTokenSentRef = useRef(false);
+
+  // 클라이언트 마운트 시 localStorage에서 초기 상태 로드
+  // hydration mismatch 방지를 위해 useEffect에서 초기화
+  useEffect(() => {
+    const dateStr = getTodayString();
+    const loaded = loadDailyState(dateStr);
+
+    setTodayStr(dateStr); // eslint-disable-line
+    setDailyLog({
+      date: dateStr,
+      breakfast: loaded.breakfast,
+      lunch: loaded.lunch,
+      dinner: loaded.dinner,
+      breakfastMedications: loaded.breakfastMedications,
+      lunchMedications: loaded.lunchMedications,
+      dinnerMedications: loaded.dinnerMedications,
+      workout: loaded.workout,
+      memo: loaded.memo,
+    });
+    setMealCompletion(loaded.mealCompletion);
+    setIsMounted(true);
+  }, []);
 
   const fetchDatabaseOptions = useCallback(async () => {
     setIsLoadingDatabaseOptions(true);
@@ -270,6 +298,47 @@ export default function HomePage() {
       setIsLoadingRecentMedications(false);
     }
   }, []);
+
+  const sendWidgetTokenToNativeApp = useCallback(async () => {
+    if (widgetTokenSentRef.current) return;
+    widgetTokenSentRef.current = true;
+
+    const webkit = (
+      window as unknown as {
+        webkit?: {
+          messageHandlers?: {
+            widgetToken?: { postMessage: (token: string) => void };
+          };
+        };
+      }
+    ).webkit;
+
+    if (!webkit?.messageHandlers?.widgetToken) {
+      return;
+    }
+
+    try {
+      const response = await fetch("/api/widget/token", {
+        method: "POST",
+        credentials: "include",
+      });
+
+      if (!response.ok) return;
+
+      const data = await response.json();
+      const token = data.widgetToken;
+
+      if (!token) return;
+
+      webkit.messageHandlers.widgetToken.postMessage(token);
+    } catch {
+      // silent fail
+    }
+  }, []);
+
+  useEffect(() => {
+    sendWidgetTokenToNativeApp();
+  }, [sendWidgetTokenToNativeApp]);
 
   useEffect(() => {
     // eslint-disable-next-line
@@ -493,6 +562,17 @@ export default function HomePage() {
       setIsSaving(false);
     }
   };
+
+  if (!isMounted) {
+    return (
+      <div className="min-h-screen bg-[#f5f3ef] flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-6 h-6 border-3 border-stone-300 border-t-stone-700 rounded-full animate-spin mx-auto mb-2" />
+          <p className="text-sm text-stone-600">로딩 중...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div key={todayStr} className="min-h-screen bg-[#f5f3ef] py-8 px-4 pb-24">
