@@ -169,7 +169,7 @@ export function isWebViewEnvironment(): boolean {
 
   return Boolean(
     window.webkit?.messageHandlers?.getDailyState &&
-      window.webkit?.messageHandlers?.saveDailyState,
+    window.webkit?.messageHandlers?.saveDailyState,
   );
 }
 
@@ -256,7 +256,7 @@ export function saveDailyState(date: string, state: DailyState) {
 
     const sevenDaysAgo = getDateString(new Date(date), -7);
     const cleaned = Object.fromEntries(
-      Object.entries(data).filter(([key]) => key >= sevenDaysAgo)
+      Object.entries(data).filter(([key]) => key >= sevenDaysAgo),
     );
 
     localStorage.setItem(DAILY_STATE_KEY, JSON.stringify(cleaned));
@@ -268,10 +268,17 @@ export function saveDailyState(date: string, state: DailyState) {
 export async function loadDailyStateAsync(date: string): Promise<DailyState> {
   if (isWebViewEnvironment()) {
     try {
-      const payload = await sendBridgeRequest<unknown>("getDailyState", {
-        date,
-      });
-      return normalizeDailyState(payload);
+      const payload = await sendBridgeRequest<{ state?: unknown }>(
+        "getDailyState",
+        {
+          date,
+        },
+      );
+      return normalizeDailyState(
+        payload && typeof payload === "object" && "state" in payload
+          ? payload.state
+          : payload,
+      );
     } catch (error) {
       console.error("Failed to load daily state via bridge:", error);
       return createEmptyDailyState();
