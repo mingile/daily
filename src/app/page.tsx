@@ -10,8 +10,9 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
 import { X, Minus, Plus, Check } from "lucide-react";
 import {
-  loadDailyState,
-  saveDailyState,
+  loadDailyStateAsync,
+  saveDailyStateAsync,
+  type DailyState,
   type MealCompletionState,
 } from "@/lib/dailyStateStorage";
 
@@ -129,28 +130,82 @@ export default function HomePage() {
   const [isConnectingDb, setIsConnectingDb] = useState(false);
   const [dbConnectError, setDbConnectError] = useState("");
   const widgetTokenSentRef = useRef(false);
+  const isInitialLoadRef = useRef(true);
 
-  // 클라이언트 마운트 시 localStorage에서 초기 상태 로드
+  useEffect(() => {
+    setTodayStr(getTodayString()); // eslint-disable-line
+  }, []);
+
   // hydration mismatch 방지를 위해 useEffect에서 초기화
   useEffect(() => {
-    const dateStr = getTodayString();
-    const loaded = loadDailyState(dateStr);
+    if (!todayStr) {
+      return;
+    }
 
-    setTodayStr(dateStr); // eslint-disable-line
-    setDailyLog({
-      date: dateStr,
-      breakfast: loaded.breakfast,
-      lunch: loaded.lunch,
-      dinner: loaded.dinner,
-      breakfastMedications: loaded.breakfastMedications,
-      lunchMedications: loaded.lunchMedications,
-      dinnerMedications: loaded.dinnerMedications,
-      workout: loaded.workout,
-      memo: loaded.memo,
-    });
-    setMealCompletion(loaded.mealCompletion);
-    setIsMounted(true);
-  }, []);
+    let cancelled = false;
+
+    const loadState = async () => {
+      try {
+        const loaded = await loadDailyStateAsync(todayStr);
+        if (cancelled) {
+          return;
+        }
+
+        setDailyLog({
+          date: todayStr,
+          breakfast: loaded.breakfast,
+          lunch: loaded.lunch,
+          dinner: loaded.dinner,
+          breakfastMedications: loaded.breakfastMedications,
+          lunchMedications: loaded.lunchMedications,
+          dinnerMedications: loaded.dinnerMedications,
+          workout: loaded.workout,
+          memo: loaded.memo,
+        });
+        setMealCompletion(loaded.mealCompletion);
+      } catch (error) {
+        if (cancelled) {
+          return;
+        }
+        console.error("Failed to load daily state:", error);
+      } finally {
+        if (!cancelled && isInitialLoadRef.current) {
+          setIsMounted(true);
+          isInitialLoadRef.current = false;
+        }
+      }
+    };
+
+    void loadState();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [todayStr]);
+
+  const persistDailyState = useCallback(
+    (overrides: Partial<DailyState> = {}) => {
+      const state: DailyState = {
+        mealCompletion: overrides.mealCompletion ?? mealCompletion,
+        workout: overrides.workout ?? dailyLog.workout,
+        memo: overrides.memo ?? dailyLog.memo,
+        breakfast: overrides.breakfast ?? dailyLog.breakfast,
+        lunch: overrides.lunch ?? dailyLog.lunch,
+        dinner: overrides.dinner ?? dailyLog.dinner,
+        breakfastMedications:
+          overrides.breakfastMedications ?? dailyLog.breakfastMedications,
+        lunchMedications:
+          overrides.lunchMedications ?? dailyLog.lunchMedications,
+        dinnerMedications:
+          overrides.dinnerMedications ?? dailyLog.dinnerMedications,
+      };
+
+      void saveDailyStateAsync(todayStr, state).catch((error) => {
+        console.error("Failed to save daily state:", error);
+      });
+    },
+    [todayStr, mealCompletion, dailyLog],
+  );
 
   const fetchDatabaseOptions = useCallback(async () => {
     setIsLoadingDatabaseOptions(true);
@@ -409,17 +464,7 @@ export default function HomePage() {
         ...prev,
         [mealType]: !prev[mealType],
       };
-      saveDailyState(todayStr, {
-        mealCompletion: nextState,
-        workout: dailyLog.workout,
-        memo: dailyLog.memo,
-        breakfast: dailyLog.breakfast,
-        lunch: dailyLog.lunch,
-        dinner: dailyLog.dinner,
-        breakfastMedications: dailyLog.breakfastMedications,
-        lunchMedications: dailyLog.lunchMedications,
-        dinnerMedications: dailyLog.dinnerMedications,
-      });
+      persistDailyState({ mealCompletion: nextState });
       return nextState;
     });
   };
@@ -758,17 +803,7 @@ export default function HomePage() {
                     ...prev,
                     workout: newWorkout,
                   }));
-                  saveDailyState(todayStr, {
-                    mealCompletion,
-                    workout: newWorkout,
-                    memo: dailyLog.memo,
-                    breakfast: dailyLog.breakfast,
-                    lunch: dailyLog.lunch,
-                    dinner: dailyLog.dinner,
-                    breakfastMedications: dailyLog.breakfastMedications,
-                    lunchMedications: dailyLog.lunchMedications,
-                    dinnerMedications: dailyLog.dinnerMedications,
-                  });
+                  persistDailyState({ workout: newWorkout });
                 }}
                 className="border-stone-300"
               />
@@ -793,17 +828,7 @@ export default function HomePage() {
                 setDailyLog((prev) => ({ ...prev, memo: e.target.value }))
               }
               onBlur={() => {
-                saveDailyState(todayStr, {
-                  mealCompletion,
-                  workout: dailyLog.workout,
-                  memo: dailyLog.memo,
-                  breakfast: dailyLog.breakfast,
-                  lunch: dailyLog.lunch,
-                  dinner: dailyLog.dinner,
-                  breakfastMedications: dailyLog.breakfastMedications,
-                  lunchMedications: dailyLog.lunchMedications,
-                  dinnerMedications: dailyLog.dinnerMedications,
-                });
+                persistDailyState({ memo: dailyLog.memo });
               }}
               placeholder="오늘 하루를 기록해보세요"
               className="min-h-[100px] border-stone-200 focus-visible:border-stone-400 focus-visible:ring-stone-300 resize-none"
