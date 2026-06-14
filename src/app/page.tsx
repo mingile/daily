@@ -12,6 +12,7 @@ import { X, Minus, Plus, Check } from "lucide-react";
 import {
   loadDailyStateAsync,
   saveDailyStateAsync,
+  isWebViewEnvironment,
   type DailyState,
   type MealCompletionState,
 } from "@/lib/dailyStateStorage";
@@ -281,6 +282,13 @@ export default function HomePage() {
   }, [fetchDatabaseOptions]);
 
   const fetchDailyLog = useCallback(async () => {
+    if (isWebViewEnvironment()) {
+      console.debug(
+        "[Daily] Skipping Notion fetchDailyLog in iOS WebView; iOS Storage is SSOT",
+      );
+      return;
+    }
+
     setIsDailyLogLoading(true);
     setLoadError("");
 
