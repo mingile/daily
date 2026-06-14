@@ -133,6 +133,42 @@ export default function HomePage() {
   const widgetTokenSentRef = useRef(false);
   const isInitialLoadRef = useRef(true);
 
+  const applyLoadedDailyState = useCallback((loaded: DailyState, date: string) => {
+    setDailyLog({
+      date,
+      breakfast: loaded.breakfast,
+      lunch: loaded.lunch,
+      dinner: loaded.dinner,
+      breakfastMedications: loaded.breakfastMedications,
+      lunchMedications: loaded.lunchMedications,
+      dinnerMedications: loaded.dinnerMedications,
+      workout: loaded.workout,
+      memo: loaded.memo,
+    });
+    setMealCompletion(loaded.mealCompletion);
+  }, []);
+
+  const reloadDailyStateFromIOS = useCallback(
+    async (source: string) => {
+      if (!isWebViewEnvironment() || !todayStr) {
+        return;
+      }
+
+      console.debug(`[Daily] reloadDailyStateFromIOS (${source})`);
+
+      try {
+        const loaded = await loadDailyStateAsync(todayStr);
+        applyLoadedDailyState(loaded, todayStr);
+      } catch (error) {
+        console.error(
+          `[Daily] reloadDailyStateFromIOS failed (${source}):`,
+          error,
+        );
+      }
+    },
+    [todayStr, applyLoadedDailyState],
+  );
+
   useEffect(() => {
     setTodayStr(getTodayString()); // eslint-disable-line
   }, []);
@@ -152,18 +188,7 @@ export default function HomePage() {
           return;
         }
 
-        setDailyLog({
-          date: todayStr,
-          breakfast: loaded.breakfast,
-          lunch: loaded.lunch,
-          dinner: loaded.dinner,
-          breakfastMedications: loaded.breakfastMedications,
-          lunchMedications: loaded.lunchMedications,
-          dinnerMedications: loaded.dinnerMedications,
-          workout: loaded.workout,
-          memo: loaded.memo,
-        });
-        setMealCompletion(loaded.mealCompletion);
+        applyLoadedDailyState(loaded, todayStr);
       } catch (error) {
         if (cancelled) {
           return;
@@ -182,7 +207,37 @@ export default function HomePage() {
     return () => {
       cancelled = true;
     };
-  }, [todayStr]);
+  }, [todayStr, applyLoadedDailyState]);
+
+  useEffect(() => {
+    if (!isWebViewEnvironment()) {
+      return;
+    }
+
+    const handleNativeEvent = () => {
+      void reloadDailyStateFromIOS("dailyAppStateDidChange");
+    };
+
+    const handlePageShow = () => {
+      void reloadDailyStateFromIOS("pageshow");
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        void reloadDailyStateFromIOS("visibilitychange");
+      }
+    };
+
+    window.addEventListener("dailyAppStateDidChange", handleNativeEvent);
+    window.addEventListener("pageshow", handlePageShow);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      window.removeEventListener("dailyAppStateDidChange", handleNativeEvent);
+      window.removeEventListener("pageshow", handlePageShow);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [reloadDailyStateFromIOS]);
 
   const persistDailyState = useCallback(
     (overrides: Partial<DailyState> = {}) => {
