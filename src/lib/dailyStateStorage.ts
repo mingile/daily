@@ -38,6 +38,7 @@ declare global {
       resolve: (requestId: string, payload?: unknown) => void;
       reject: (requestId: string, error: unknown) => void;
     };
+    __dailyReloadFromIOS?: (source: string) => void;
   }
 }
 

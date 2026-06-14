@@ -154,7 +154,7 @@ export default function HomePage() {
         return;
       }
 
-      console.debug(`[Daily] reloadDailyStateFromIOS (${source})`);
+      console.log(`[Daily] reloadDailyStateFromIOS (${source})`);
 
       try {
         const loaded = await loadDailyStateAsync(todayStr);
@@ -210,21 +210,23 @@ export default function HomePage() {
   }, [todayStr, applyLoadedDailyState]);
 
   useEffect(() => {
-    if (!isWebViewEnvironment()) {
-      return;
-    }
+    const reload = (source: string) => {
+      void reloadDailyStateFromIOS(source);
+    };
+
+    window.__dailyReloadFromIOS = reload;
 
     const handleNativeEvent = () => {
-      void reloadDailyStateFromIOS("dailyAppStateDidChange");
+      reload("dailyAppStateDidChange");
     };
 
     const handlePageShow = () => {
-      void reloadDailyStateFromIOS("pageshow");
+      reload("pageshow");
     };
 
     const handleVisibilityChange = () => {
       if (document.visibilityState === "visible") {
-        void reloadDailyStateFromIOS("visibilitychange");
+        reload("visibilitychange");
       }
     };
 
@@ -233,6 +235,7 @@ export default function HomePage() {
     document.addEventListener("visibilitychange", handleVisibilityChange);
 
     return () => {
+      delete window.__dailyReloadFromIOS;
       window.removeEventListener("dailyAppStateDidChange", handleNativeEvent);
       window.removeEventListener("pageshow", handlePageShow);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
