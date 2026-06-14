@@ -259,11 +259,37 @@ export default function HomePage() {
           overrides.dinnerMedications ?? dailyLog.dinnerMedications,
       };
 
-      void saveDailyStateAsync(todayStr, state).catch((error) => {
-        console.error("Failed to save daily state:", error);
-      });
+      void saveDailyStateAsync(todayStr, state)
+        .then(() => {
+          if (isWebViewEnvironment()) {
+            console.debug("[Daily] persisted daily state to iOS storage");
+          }
+        })
+        .catch((error) => {
+          console.warn("Failed to save daily state:", error);
+        });
     },
     [todayStr, mealCompletion, dailyLog],
+  );
+
+  const applyDailyLogChange = useCallback(
+    (updater: (prev: DailyLog) => DailyLog) => {
+      setDailyLog((prev) => {
+        const nextDailyLog = updater(prev);
+        persistDailyState({
+          breakfast: nextDailyLog.breakfast,
+          lunch: nextDailyLog.lunch,
+          dinner: nextDailyLog.dinner,
+          breakfastMedications: nextDailyLog.breakfastMedications,
+          lunchMedications: nextDailyLog.lunchMedications,
+          dinnerMedications: nextDailyLog.dinnerMedications,
+          workout: nextDailyLog.workout,
+          memo: nextDailyLog.memo,
+        });
+        return nextDailyLog;
+      });
+    },
+    [persistDailyState],
   );
 
   const fetchDatabaseOptions = useCallback(async () => {
@@ -481,14 +507,14 @@ export default function HomePage() {
   ]);
 
   const handleAddFood = (mealType: MealType, food: FoodItem) => {
-    setDailyLog((prev) => ({
+    applyDailyLogChange((prev) => ({
       ...prev,
       [mealType]: [...prev[mealType], food],
     }));
   };
 
   const handleRemoveFood = (mealType: MealType, index: number) => {
-    setDailyLog((prev) => ({
+    applyDailyLogChange((prev) => ({
       ...prev,
       [mealType]: prev[mealType].filter((_, idx) => idx !== index),
     }));
@@ -503,7 +529,7 @@ export default function HomePage() {
       | "lunchMedications"
       | "dinnerMedications";
 
-    setDailyLog((prev) => ({
+    applyDailyLogChange((prev) => ({
       ...prev,
       [medicationKey]: [...prev[medicationKey], medication],
     }));
@@ -518,7 +544,7 @@ export default function HomePage() {
       | "lunchMedications"
       | "dinnerMedications";
 
-    setDailyLog((prev) => ({
+    applyDailyLogChange((prev) => ({
       ...prev,
       [medicationKey]: prev[medicationKey].filter((m) => m !== medication),
     }));
