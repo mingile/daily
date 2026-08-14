@@ -49,6 +49,28 @@ function serializeFoodItems(items: FoodItem[]): string {
     .join("\n");
 }
 
+function buildNotionLogPayload(source: {
+  breakfast: FoodItem[];
+  lunch: FoodItem[];
+  dinner: FoodItem[];
+  breakfastMedications: string[];
+  lunchMedications: string[];
+  dinnerMedications: string[];
+  workout: boolean;
+  memo: string;
+}) {
+  return {
+    breakfast: serializeFoodItems(source.breakfast),
+    lunch: serializeFoodItems(source.lunch),
+    dinner: serializeFoodItems(source.dinner),
+    breakfastMedications: source.breakfastMedications,
+    lunchMedications: source.lunchMedications,
+    dinnerMedications: source.dinnerMedications,
+    workout: source.workout,
+    memo: source.memo,
+  };
+}
+
 function parseFoodItems(mealString: string): FoodItem[] {
   if (!mealString) return [];
 
@@ -658,26 +680,28 @@ export default function HomePage() {
     setSaveMessage("");
 
     try {
-      const requestBody = {
-        date: dailyLog.date,
-        log: {
-          breakfast: serializeFoodItems(dailyLog.breakfast),
-          lunch: serializeFoodItems(dailyLog.lunch),
-          dinner: serializeFoodItems(dailyLog.dinner),
-          breakfastMedications: dailyLog.breakfastMedications,
-          lunchMedications: dailyLog.lunchMedications,
-          dinnerMedications: dailyLog.dinnerMedications,
-          workout: dailyLog.workout,
-          memo: dailyLog.memo,
-        },
-      };
+      let date: string;
+      let log;
+
+      if (isWebViewEnvironment()) {
+        const iosState = await loadDailyStateAsync(todayStr);
+        date = todayStr;
+        log = buildNotionLogPayload(iosState);
+        console.debug(
+          "[Daily] Notion push-only save from iOS App Group Storage",
+          { date },
+        );
+      } else {
+        date = dailyLog.date;
+        log = buildNotionLogPayload(dailyLog);
+      }
 
       const response = await fetch("/api/daily-log", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify(requestBody),
+        body: JSON.stringify({ date, log }),
       });
 
       if (!response.ok) {
@@ -686,7 +710,11 @@ export default function HomePage() {
       }
 
       const data = await response.json();
-      console.log("저장 응답:", data);
+      if (isWebViewEnvironment()) {
+        console.debug("[Daily] Notion push from iOS Storage succeeded:", data);
+      } else {
+        console.log("저장 응답:", data);
+      }
       setSaveMessage("저장 완료");
 
       setTimeout(() => setSaveMessage(""), 3000);

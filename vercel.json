@@ -1,0 +1,12 @@
+{
+    "rewrites": [
+      {
+        "source": "/dailyset",
+        "destination": "https://ex-log-five.vercel.app/dailyset"
+      },
+      {
+        "source": "/dailyset/:path*",
+        "destination": "https://ex-log-five.vercel.app/dailyset/:path*"
+      }
+    ]
+  }
