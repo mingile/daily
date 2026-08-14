@@ -155,20 +155,23 @@ export default function HomePage() {
   const widgetTokenSentRef = useRef(false);
   const isInitialLoadRef = useRef(true);
 
-  const applyLoadedDailyState = useCallback((loaded: DailyState, date: string) => {
-    setDailyLog({
-      date,
-      breakfast: loaded.breakfast,
-      lunch: loaded.lunch,
-      dinner: loaded.dinner,
-      breakfastMedications: loaded.breakfastMedications,
-      lunchMedications: loaded.lunchMedications,
-      dinnerMedications: loaded.dinnerMedications,
-      workout: loaded.workout,
-      memo: loaded.memo,
-    });
-    setMealCompletion(loaded.mealCompletion);
-  }, []);
+  const applyLoadedDailyState = useCallback(
+    (loaded: DailyState, date: string) => {
+      setDailyLog({
+        date,
+        breakfast: loaded.breakfast,
+        lunch: loaded.lunch,
+        dinner: loaded.dinner,
+        breakfastMedications: loaded.breakfastMedications,
+        lunchMedications: loaded.lunchMedications,
+        dinnerMedications: loaded.dinnerMedications,
+        workout: loaded.workout,
+        memo: loaded.memo,
+      });
+      setMealCompletion(loaded.mealCompletion);
+    },
+    [],
+  );
 
   const reloadDailyStateFromIOS = useCallback(
     async (source: string) => {
@@ -803,6 +806,18 @@ export default function HomePage() {
         {!notionConnection.loading && !notionConnection.notionConnected && (
           <div className="bg-blue-50 border border-blue-200 text-blue-800 px-4 py-3 rounded-lg text-sm text-center">
             Notion을 연결하면 daily 기록을 저장하고 불러올 수 있습니다.
+            <p className="mt-2">
+              연동 버튼을 눌렀을 때 브라우저 대신 Notion 앱이 열리면, Safari에서{" "}
+              <a
+                href="https://app.notion.com"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-medium text-foreground underline underline-offset-2"
+              >
+                app.notion.com
+              </a>
+              에 한 번 접속한 뒤 다시 시도해 보세요.
+            </p>
           </div>
         )}
 
