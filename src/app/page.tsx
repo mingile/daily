@@ -16,6 +16,17 @@ import {
   type DailyState,
   type MealCompletionState,
 } from "@/lib/dailyStateStorage";
+import { isIOS, isIOSSafariBrowser, shouldUseSafariHandoffFlow } from "@/lib/is-standalone-pwa";
+import {
+  beginNotionConnectFlow,
+  clearNotionConnectSession,
+  hasNotionConnectPendingFlow,
+  startNotionConnectHandoff,
+} from "@/lib/notion-connect-session";
+import {
+  isNotionFullyConnected,
+  mapConnectionToUiStatus,
+} from "@/lib/notion-connect-ui-status";
 
 type FoodItem = {
   name: string;
@@ -152,6 +163,9 @@ export default function HomePage() {
   const [selectedDatabaseId, setSelectedDatabaseId] = useState<string>("");
   const [isConnectingDb, setIsConnectingDb] = useState(false);
   const [dbConnectError, setDbConnectError] = useState("");
+  const [notionOauthPending, setNotionOauthPending] = useState(false);
+  const [notionOauthError, setNotionOauthError] = useState("");
+  const [showSafariPwaReturnGuide, setShowSafariPwaReturnGuide] = useState(false);
   const widgetTokenSentRef = useRef(false);
   const isInitialLoadRef = useRef(true);
 
@@ -233,6 +247,19 @@ export default function HomePage() {
       cancelled = true;
     };
   }, [todayStr, applyLoadedDailyState]);
+
+  useEffect(() => {
+    if (sessionStorage.getItem("notion_oauth_pending") === "1") {
+      setNotionOauthPending(true);
+    }
+
+    const oauthError = new URL(window.location.href).searchParams.get(
+      "notion_oauth_error",
+    );
+    if (oauthError) {
+      setNotionOauthError(`Notion 연결 실패 (${oauthError})`);
+    }
+  }, []);
 
   useEffect(() => {
     const reload = (source: string) => {
@@ -518,6 +545,70 @@ export default function HomePage() {
   }, [fetchNotionConnection]);
 
   useEffect(() => {
+    if (!shouldUseSafariHandoffFlow()) {
+      return;
+    }
+
+    if (notionConnection.loading) {
+      return;
+    }
+
+    if (notionConnection.dbConnected) {
+      return;
+    }
+
+    if (!hasNotionConnectPendingFlow()) {
+      return;
+    }
+
+    if (notionConnection.notionConnected) {
+      return;
+    }
+
+    window.location.href = "/notion/connect";
+  }, [
+    notionConnection.loading,
+    notionConnection.notionConnected,
+    notionConnection.dbConnected,
+  ]);
+
+  useEffect(() => {
+    if (!notionOauthPending) {
+      return;
+    }
+
+    const syncAfterSafariOAuth = () => {
+      if (document.visibilityState !== "visible") {
+        return;
+      }
+
+      void fetchNotionConnection();
+    };
+
+    document.addEventListener("visibilitychange", syncAfterSafariOAuth);
+    window.addEventListener("focus", syncAfterSafariOAuth);
+    window.addEventListener("pageshow", syncAfterSafariOAuth);
+
+    return () => {
+      document.removeEventListener("visibilitychange", syncAfterSafariOAuth);
+      window.removeEventListener("focus", syncAfterSafariOAuth);
+      window.removeEventListener("pageshow", syncAfterSafariOAuth);
+    };
+  }, [notionOauthPending, fetchNotionConnection]);
+
+  useEffect(() => {
+    if (!notionOauthPending || !isNotionFullyConnected(notionConnection.dbConnected)) {
+      return;
+    }
+
+    setNotionOauthPending(false);
+    setNotionOauthError("");
+    clearNotionConnectSession();
+    setSaveMessage("Notion 연결 완료");
+    setTimeout(() => setSaveMessage(""), 3000);
+  }, [notionOauthPending, notionConnection.dbConnected]);
+
+  useEffect(() => {
     if (notionConnection.dbConnected) {
       // eslint-disable-next-line
       fetchDailyLog();
@@ -586,7 +677,30 @@ export default function HomePage() {
     });
   };
 
-  const handleNotionConnect = () => {
+  const handleNotionConnect = async () => {
+    setNotionOauthError("");
+
+    if (shouldUseSafariHandoffFlow()) {
+      try {
+        const handoffId = await startNotionConnectHandoff();
+        beginNotionConnectFlow(handoffId);
+        setNotionOauthPending(true);
+        window.location.href = `/notion/connect?handoff=${handoffId}`;
+      } catch (error) {
+        clearNotionConnectSession();
+        setNotionOauthPending(false);
+        setNotionOauthError(
+          error instanceof Error
+            ? error.message
+            : isIOS()
+              ? "Safari OAuth 시작 중 오류가 발생했습니다."
+              : "Notion OAuth 시작 중 오류가 발생했습니다.",
+        );
+      }
+
+      return;
+    }
+
     window.location.href = "/api/notion/auth";
   };
 
@@ -605,6 +719,10 @@ export default function HomePage() {
         notionConnected: false,
         dbConnected: false,
       });
+      setNotionOauthPending(false);
+      setNotionOauthError("");
+      setShowSafariPwaReturnGuide(false);
+      clearNotionConnectSession();
 
       setDailyLog({
         date: todayStr,
@@ -666,8 +784,12 @@ export default function HomePage() {
         });
       }
 
-      setSaveMessage("DB 연결 완료");
-      setTimeout(() => setSaveMessage(""), 3000);
+      if (isIOSSafariBrowser()) {
+        setShowSafariPwaReturnGuide(true);
+      } else {
+        setSaveMessage("DB 연결 완료");
+        setTimeout(() => setSaveMessage(""), 3000);
+      }
     } catch (error) {
       console.error("DB 연결 오류:", error);
       setDbConnectError(
@@ -731,6 +853,13 @@ export default function HomePage() {
     }
   };
 
+  const notionConnectUiStatus = mapConnectionToUiStatus(
+    notionConnection.notionConnected,
+    notionConnection.dbConnected,
+  );
+  const useSafariHandoffFlow = shouldUseSafariHandoffFlow();
+  const useSafariDbSelectionGuide = isIOSSafariBrowser();
+
   if (!isMounted) {
     return (
       <div className="min-h-screen bg-[#f5f3ef] flex items-center justify-center">
@@ -759,22 +888,27 @@ export default function HomePage() {
                 <div className="flex items-center justify-center gap-2">
                   <Badge
                     variant={
-                      notionConnection.notionConnected ? "default" : "secondary"
+                      isNotionFullyConnected(notionConnection.dbConnected)
+                        ? "default"
+                        : "secondary"
                     }
                     className={
-                      notionConnection.notionConnected
+                      isNotionFullyConnected(notionConnection.dbConnected)
                         ? "bg-green-600 text-white hover:bg-green-700"
-                        : "bg-stone-200 text-stone-600"
+                        : notionConnection.notionConnected
+                          ? "bg-amber-100 text-amber-900 hover:bg-amber-100"
+                          : "bg-stone-200 text-stone-600"
                     }
                   >
-                    {notionConnection.notionConnected
-                      ? notionConnection.dbConnected
-                        ? "Daily DB 연결됨"
-                        : "Notion 연결됨"
-                      : "Notion 연결 필요"}
+                    {isNotionFullyConnected(notionConnection.dbConnected)
+                      ? "Daily DB 연결됨"
+                      : notionConnection.notionConnected
+                        ? "DB 선택 필요"
+                        : "Notion 연결 필요"}
                   </Badge>
                 </div>
-                {notionConnection.notionConnected ? (
+                {isNotionFullyConnected(notionConnection.dbConnected) ||
+                notionConnection.notionConnected ? (
                   <Button
                     onClick={handleNotionDisconnect}
                     size="sm"
@@ -806,29 +940,57 @@ export default function HomePage() {
         {!notionConnection.loading && !notionConnection.notionConnected && (
           <div className="bg-blue-50 border border-blue-200 text-blue-800 px-4 py-3 rounded-lg text-sm text-center">
             Notion을 연결하면 daily 기록을 저장하고 불러올 수 있습니다.
-            <p className="mt-2">
-              연동 버튼을 눌렀을 때 브라우저 대신 Notion 앱이 열리면, Safari에서{" "}
-              <a
-                href="https://app.notion.com"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="font-medium text-foreground underline underline-offset-2"
-              >
-                app.notion.com
-              </a>
-              에 한 번 접속한 뒤 다시 시도해 보세요.
-            </p>
+          </div>
+        )}
+
+        {notionOauthPending && useSafariHandoffFlow && (
+          <div className="bg-amber-50 border border-amber-200 text-amber-900 px-4 py-3 rounded-lg text-sm text-center">
+            {notionConnectUiStatus === "notion_authorized"
+              ? "Notion 계정은 연결되었습니다. Safari에서 데이터베이스 선택을 완료한 뒤 이 앱으로 돌아와 주세요."
+              : "Safari에서 Notion 연결을 완료한 뒤 이 앱으로 돌아와 주세요."}
+          </div>
+        )}
+
+        {!notionConnection.loading &&
+          useSafariHandoffFlow &&
+          notionConnectUiStatus === "notion_authorized" &&
+          !notionOauthPending && (
+            <div className="bg-amber-50 border border-amber-200 text-amber-900 px-4 py-3 rounded-lg text-sm text-center">
+              Notion 계정은 연결되었습니다. Safari에서 데이터베이스 선택을
+              완료해 주세요.
+            </div>
+          )}
+
+        {notionOauthError && (
+          <div className="bg-red-50 border border-red-200 text-red-800 px-4 py-3 rounded-lg text-sm text-center">
+            {notionOauthError}
           </div>
         )}
 
         {!notionConnection.loading &&
           notionConnection.notionConnected &&
-          !notionConnection.dbConnected && (
+          !notionConnection.dbConnected &&
+          !useSafariHandoffFlow && (
             <Card className="bg-white border-stone-200 shadow-sm">
-              <CardHeader className="pb-4">
-                <CardTitle className="text-stone-800 text-lg">
-                  Daily Health Log DB 선택
-                </CardTitle>
+              <CardHeader className="pb-4 space-y-2">
+                {useSafariDbSelectionGuide ? (
+                  <>
+                    <p className="text-xs font-medium uppercase tracking-wide text-stone-500">
+                      1단계 완료
+                    </p>
+                    <CardTitle className="text-stone-800 text-lg">
+                      마지막으로 데이터베이스를 선택해 주세요
+                    </CardTitle>
+                    <p className="text-sm text-stone-600">
+                      Notion 계정 연결이 완료되었습니다. 아직 앱으로 돌아가지
+                      말고 사용할 데이터베이스까지 선택해 주세요.
+                    </p>
+                  </>
+                ) : (
+                  <CardTitle className="text-stone-800 text-lg">
+                    Daily Health Log DB 선택
+                  </CardTitle>
+                )}
               </CardHeader>
               <CardContent className="space-y-4">
                 {isLoadingDatabaseOptions ? (
@@ -884,6 +1046,22 @@ export default function HomePage() {
               </CardContent>
             </Card>
           )}
+
+        {showSafariPwaReturnGuide && (
+          <Card className="bg-white border-stone-200 shadow-sm">
+            <CardHeader className="pb-4 space-y-2">
+              <CardTitle className="text-stone-800 text-lg">
+                Notion 연결이 완료됐어요
+              </CardTitle>
+              <p className="text-sm text-stone-600">
+                이제 앱 전환기 또는 홈 화면에서 PWA를 다시 열어주세요.
+              </p>
+              <p className="text-xs text-stone-500">
+                앱으로 돌아가면 연결 상태가 자동으로 반영됩니다.
+              </p>
+            </CardHeader>
+          </Card>
+        )}
 
         {notionConnection.dbConnected && isDailyLogLoading && (
           <div className="text-center py-6">

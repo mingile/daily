@@ -3,6 +3,27 @@ import { randomUUID } from "crypto";
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 
+function oauthErrorRedirect(appBaseUrl: string, reason: string) {
+  const errorUrl = new URL("/", appBaseUrl);
+  errorUrl.searchParams.set("notion_oauth_error", reason);
+  return NextResponse.redirect(errorUrl, 302);
+}
+
+function clearOAuthStateCookies(
+  cookieStore: Awaited<ReturnType<typeof cookies>>,
+) {
+  const secure = process.env.NODE_ENV === "production";
+  const clearOptions = {
+    httpOnly: true,
+    secure,
+    sameSite: "lax" as const,
+    maxAge: 0,
+    path: "/",
+  };
+  cookieStore.set("notion_oauth_state", "", clearOptions);
+  cookieStore.set("notion_oauth_state_expires", "", clearOptions);
+}
+
 export async function GET(request: Request) {
   const appBaseUrl = process.env.APP_BASE_URL;
 
@@ -18,26 +39,29 @@ export async function GET(request: Request) {
   const state = url.searchParams.get("state");
 
   if (!code || !state) {
-    return NextResponse.redirect(new URL("/api/notion/auth", appBaseUrl));
+    return oauthErrorRedirect(appBaseUrl, "missing_params");
   }
 
   const cookieStore = await cookies();
   const savedState = cookieStore.get("notion_oauth_state")?.value;
+  const stateExpiresRaw = cookieStore.get("notion_oauth_state_expires")?.value;
   const user_key = cookieStore.get("user_key")?.value;
+
   if (!user_key) {
-    return NextResponse.redirect(new URL("/api/notion/auth", appBaseUrl));
+    clearOAuthStateCookies(cookieStore);
+    return oauthErrorRedirect(appBaseUrl, "session_missing");
   }
 
-  if (!savedState || savedState !== state) {
-    return NextResponse.redirect(new URL("/api/notion/auth", appBaseUrl));
-  } else {
-    cookieStore.set("notion_oauth_state", "", {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      maxAge: 0,
-      path: "/",
-    });
+  const stateExpiresAt = stateExpiresRaw ? Number(stateExpiresRaw) : NaN;
+  const isStateExpired =
+    !Number.isFinite(stateExpiresAt) || Date.now() > stateExpiresAt;
+
+  if (!savedState || savedState !== state || isStateExpired) {
+    clearOAuthStateCookies(cookieStore);
+    return oauthErrorRedirect(appBaseUrl, "invalid_state");
   }
+
+  clearOAuthStateCookies(cookieStore);
 
   const tokenUrl = process.env.NOTION_TOKEN_URL;
   const clientId = process.env.NOTION_CLIENT_ID;
@@ -51,7 +75,7 @@ export async function GET(request: Request) {
       hasClientSecret: !!clientSecret,
       hasRedirectUri: !!redirectUri,
     });
-    return NextResponse.redirect(new URL("/api/notion/auth", appBaseUrl));
+    return oauthErrorRedirect(appBaseUrl, "server_config");
   }
 
   const credentials = Buffer.from(
@@ -85,9 +109,10 @@ export async function GET(request: Request) {
     if (!tokenResponse.ok) {
       console.error("Notion token 교환 실패", {
         status: tokenResponse.status,
-        tokenData,
+        error: tokenData?.error,
+        errorDescription: tokenData?.error_description,
       });
-      return NextResponse.redirect(new URL("/api/notion/auth", appBaseUrl));
+      return oauthErrorRedirect(appBaseUrl, "token_exchange_failed");
     }
 
     console.log("Notion token 교환 성공", {
@@ -132,10 +157,10 @@ export async function GET(request: Request) {
       return NextResponse.redirect(new URL("/", appBaseUrl));
     } catch (error) {
       console.error("Notion temp 정보 저장 중 예외", error);
-      return NextResponse.redirect(new URL("/api/notion/auth", appBaseUrl));
+      return oauthErrorRedirect(appBaseUrl, "save_failed");
     }
   } catch (error) {
     console.error("Notion token 교환 중 예외", error);
-    return NextResponse.redirect(new URL("/api/notion/auth", appBaseUrl));
+    return oauthErrorRedirect(appBaseUrl, "token_exchange_failed");
   }
 }
