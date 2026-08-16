@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import { ServiceWorkerRegister } from "@/app/service-worker-register";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -14,7 +15,7 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "daily",
-  description: "매일매일의 식단과 약 복용 내용을 기록해보세요.",
+  description: "매일매일의 식사와 약 복용 내용을 기록해보세요.",
   applicationName: "daily",
   appleWebApp: {
     capable: true,
@@ -46,7 +47,10 @@ export default function RootLayout({
       lang="en"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body className="min-h-full flex flex-col">
+        <ServiceWorkerRegister />
+        {children}
+      </body>
     </html>
   );
 }
