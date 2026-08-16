@@ -7,12 +7,17 @@ import { isIOS, toSafariSchemeUrl } from "@/lib/is-standalone-pwa";
 import {
   beginNotionConnectFlow,
   clearNotionConnectSession,
-  markHandoffLaunch,
+  copyNotionHandoffAuthUrl,
+  didNotionHandoffAuthUrlCopyFail,
+  markConnectFlowStarted,
+  markSafariGuideLaunch,
   NOTION_CONNECT_HANDOFF_ID_KEY,
   NOTION_CONNECT_HANDOFF_LAUNCHED_KEY,
   isHandoffAttemptExpired,
-  SAFARI_FALLBACK_DELAY_MS,
+  SAFARI_GUIDE_FALLBACK_DELAY_MS,
   startNotionConnectHandoff,
+  wasNotionHandoffAuthUrlCopied,
+  wasSafariGuideLaunched,
 } from "@/lib/notion-connect-session";
 import {
   mapConnectionToUiStatus,
@@ -57,33 +62,24 @@ function StatusLayout({
   );
 }
 
-function SafariFallbackActions({
-  safariAuthUrl,
-  authUrl,
+function CopyAuthUrlButton({
   urlCopied,
+  autoCopyFailed,
   onCopyAuthUrl,
 }: {
-  safariAuthUrl: string;
-  authUrl: string;
   urlCopied: boolean;
+  autoCopyFailed: boolean;
   onCopyAuthUrl: () => void;
 }) {
-  if (!authUrl) {
-    return null;
-  }
-
   return (
     <div className="space-y-2 w-full">
-      <p className="text-xs text-stone-500">
-        Safari가 열리지 않으면 주소를 복사해 Safari 주소창에 붙여 넣어 주세요.
-      </p>
-      {isIOS() && safariAuthUrl && (
-        <a
-          href={safariAuthUrl}
-          className="inline-block w-full rounded-md bg-stone-800 px-4 py-2 text-sm text-white"
-        >
-          Safari에서 다시 열기
-        </a>
+      {autoCopyFailed && !urlCopied && (
+        <p className="text-xs text-amber-800">
+          연결 주소를 자동으로 복사하지 못했습니다. 아래 버튼을 눌러 주세요.
+        </p>
+      )}
+      {urlCopied && (
+        <p className="text-xs text-green-800">연결 주소를 복사했어요.</p>
       )}
       <Button
         type="button"
@@ -91,7 +87,7 @@ function SafariFallbackActions({
         onClick={onCopyAuthUrl}
         className="w-full border-stone-300 text-stone-700"
       >
-        {urlCopied ? "주소를 복사했어요" : "연결 주소 복사"}
+        {urlCopied ? "다시 복사" : "연결 주소 복사"}
       </Button>
     </div>
   );
@@ -128,7 +124,7 @@ function RecoveryActions({
 export default function NotionConnectPage() {
   const router = useRouter();
   const [handoffId, setHandoffId] = useState<string | null>(null);
-  const [handoffLaunched, setHandoffLaunched] = useState(false);
+  const [connectFlowStarted, setConnectFlowStarted] = useState(false);
   const [initialized, setInitialized] = useState(false);
   const [connection, setConnection] = useState<ConnectionState>({
     loading: false,
@@ -136,53 +132,96 @@ export default function NotionConnectPage() {
     dbConnected: false,
   });
   const [fetchError, setFetchError] = useState(false);
-  const [showSafariFallback, setShowSafariFallback] = useState(false);
   const [urlCopied, setUrlCopied] = useState(false);
+  const [autoCopyFailed, setAutoCopyFailed] = useState(false);
+  const [showSafariGuideFallback, setShowSafariGuideFallback] = useState(false);
   const [isRetrying, setIsRetrying] = useState(false);
   const [retryError, setRetryError] = useState("");
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const urlHandoff = params.get("handoff");
+    let resolvedHandoffId: string | null = null;
 
     if (urlHandoff) {
       sessionStorage.setItem(NOTION_CONNECT_HANDOFF_ID_KEY, urlHandoff);
       window.history.replaceState({}, "", "/notion/connect");
-      setHandoffId(urlHandoff);
+      resolvedHandoffId = urlHandoff;
     } else {
-      setHandoffId(sessionStorage.getItem(NOTION_CONNECT_HANDOFF_ID_KEY));
+      resolvedHandoffId = sessionStorage.getItem(NOTION_CONNECT_HANDOFF_ID_KEY);
     }
 
-    setHandoffLaunched(
-      sessionStorage.getItem(NOTION_CONNECT_HANDOFF_LAUNCHED_KEY) === "1",
-    );
+    if (resolvedHandoffId) {
+      if (sessionStorage.getItem(NOTION_CONNECT_HANDOFF_LAUNCHED_KEY) !== "1") {
+        markConnectFlowStarted(resolvedHandoffId);
+      }
+      setConnectFlowStarted(true);
+      setHandoffId(resolvedHandoffId);
+    } else {
+      setHandoffId(null);
+      setConnectFlowStarted(false);
+    }
+
     setInitialized(true);
+    setUrlCopied(wasNotionHandoffAuthUrlCopied());
+    setAutoCopyFailed(didNotionHandoffAuthUrlCopyFail());
   }, []);
 
-  const authUrl = useMemo(() => {
+  const safariGuideUrl = useMemo(() => {
     if (!handoffId || typeof window === "undefined") {
       return "";
     }
 
-    return `${window.location.origin}/api/notion/auth?handoff=${handoffId}`;
+    const guideUrl = `${window.location.origin}/notion/connect/safari-guide?handoff=${encodeURIComponent(handoffId)}`;
+    return isIOS() ? toSafariSchemeUrl(guideUrl) : guideUrl;
   }, [handoffId]);
 
-  const safariAuthUrl = useMemo(() => {
-    if (!authUrl) {
-      return "";
+  useEffect(() => {
+    if (
+      !initialized ||
+      !connectFlowStarted ||
+      !handoffId ||
+      !safariGuideUrl ||
+      !isIOS()
+    ) {
+      return;
     }
 
-    return isIOS() ? toSafariSchemeUrl(authUrl) : authUrl;
-  }, [authUrl]);
-
-  const safariHomeUrl = useMemo(() => {
-    if (typeof window === "undefined") {
-      return "";
+    if (wasSafariGuideLaunched()) {
+      return;
     }
 
-    const homeUrl = `${window.location.origin}/`;
-    return isIOS() ? toSafariSchemeUrl(homeUrl) : homeUrl;
-  }, []);
+    markSafariGuideLaunch();
+    window.location.replace(safariGuideUrl);
+  }, [initialized, connectFlowStarted, handoffId, safariGuideUrl]);
+
+  useEffect(() => {
+    if (
+      !initialized ||
+      !connectFlowStarted ||
+      !isIOS() ||
+      !wasSafariGuideLaunched() ||
+      connection.notionConnected ||
+      connection.dbConnected
+    ) {
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      if (document.visibilityState === "visible") {
+        setShowSafariGuideFallback(true);
+      }
+    }, SAFARI_GUIDE_FALLBACK_DELAY_MS);
+
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [
+    initialized,
+    connectFlowStarted,
+    connection.notionConnected,
+    connection.dbConnected,
+  ]);
 
   const fetchConnection = useCallback(async () => {
     setConnection((prev) => ({ ...prev, loading: true }));
@@ -222,17 +261,7 @@ export default function NotionConnectPage() {
   }, []);
 
   useEffect(() => {
-    if (!initialized || !handoffId || handoffLaunched || !safariAuthUrl) {
-      return;
-    }
-
-    markHandoffLaunch(handoffId);
-    setHandoffLaunched(true);
-    window.location.replace(safariAuthUrl);
-  }, [initialized, handoffId, handoffLaunched, safariAuthUrl]);
-
-  useEffect(() => {
-    if (!initialized || !handoffLaunched) {
+    if (!initialized || !connectFlowStarted) {
       return;
     }
 
@@ -255,32 +284,7 @@ export default function NotionConnectPage() {
       window.removeEventListener("focus", syncConnection);
       window.removeEventListener("pageshow", syncConnection);
     };
-  }, [initialized, handoffLaunched, fetchConnection]);
-
-  useEffect(() => {
-    if (
-      !handoffLaunched ||
-      connection.dbConnected ||
-      connection.notionConnected
-    ) {
-      setShowSafariFallback(false);
-      return;
-    }
-
-    const timer = window.setTimeout(() => {
-      if (document.visibilityState === "visible") {
-        setShowSafariFallback(true);
-      }
-    }, SAFARI_FALLBACK_DELAY_MS);
-
-    return () => {
-      window.clearTimeout(timer);
-    };
-  }, [
-    handoffLaunched,
-    connection.dbConnected,
-    connection.notionConnected,
-  ]);
+  }, [initialized, connectFlowStarted, fetchConnection]);
 
   const uiStatus: NotionConnectUiStatus = useMemo(() => {
     if (!initialized) {
@@ -291,7 +295,7 @@ export default function NotionConnectPage() {
       return "failed";
     }
 
-    if (!handoffLaunched) {
+    if (!connectFlowStarted) {
       return "starting";
     }
 
@@ -316,7 +320,7 @@ export default function NotionConnectPage() {
     initialized,
     handoffId,
     fetchError,
-    handoffLaunched,
+    connectFlowStarted,
     connection.loading,
     connection.notionConnected,
     connection.dbConnected,
@@ -335,6 +339,7 @@ export default function NotionConnectPage() {
       clearNotionConnectSession();
       const newHandoffId = await startNotionConnectHandoff();
       beginNotionConnectFlow(newHandoffId);
+      await copyNotionHandoffAuthUrl(newHandoffId);
       window.location.href = `/notion/connect?handoff=${newHandoffId}`;
     } catch (error) {
       console.error("Notion connect retry failed:", error);
@@ -348,29 +353,14 @@ export default function NotionConnectPage() {
   };
 
   const handleCopyAuthUrl = async () => {
-    if (!authUrl) {
+    if (!handoffId) {
       return;
     }
 
-    try {
-      await navigator.clipboard.writeText(authUrl);
-      setUrlCopied(true);
-      window.setTimeout(() => setUrlCopied(false), 2000);
-    } catch (error) {
-      console.error("Failed to copy auth URL:", error);
-    }
+    const copied = await copyNotionHandoffAuthUrl(handoffId);
+    setUrlCopied(copied);
+    setAutoCopyFailed(!copied);
   };
-
-  const fallbackActions = showSafariFallback ? (
-    <SafariFallbackActions
-      safariAuthUrl={safariAuthUrl}
-      authUrl={authUrl}
-      urlCopied={urlCopied}
-      onCopyAuthUrl={() => {
-        void handleCopyAuthUrl();
-      }}
-    />
-  ) : null;
 
   if (!initialized) {
     return (
@@ -397,11 +387,11 @@ export default function NotionConnectPage() {
           }}
           onGoHome={handleGoHome}
         />
-        {retryError && (
-          <p className="text-xs text-red-700">{retryError}</p>
-        )}
+        {retryError && <p className="text-xs text-red-700">{retryError}</p>}
         {isRetrying && (
-          <p className="text-xs text-stone-500">다시 연결을 준비하고 있습니다...</p>
+          <p className="text-xs text-stone-500">
+            다시 연결을 준비하고 있습니다...
+          </p>
         )}
       </StatusLayout>
     );
@@ -419,30 +409,11 @@ export default function NotionConnectPage() {
           }}
           onGoHome={handleGoHome}
         />
-        {retryError && (
-          <p className="text-xs text-red-700">{retryError}</p>
-        )}
+        {retryError && <p className="text-xs text-red-700">{retryError}</p>}
         {isRetrying && (
-          <p className="text-xs text-stone-500">다시 연결을 준비하고 있습니다...</p>
-        )}
-      </StatusLayout>
-    );
-  }
-
-  if (uiStatus === "starting") {
-    return (
-      <StatusLayout
-        title="Safari에서 Notion을 연결하고 있어요"
-        description="Notion 계정 승인 후 사용할 데이터베이스까지 선택해 주세요."
-        hint="모든 과정이 완료되면 이 앱으로 돌아오세요."
-      >
-        {isIOS() && safariAuthUrl && (
-          <a
-            href={safariAuthUrl}
-            className="inline-block rounded-md bg-stone-800 px-4 py-2 text-sm text-white"
-          >
-            Safari에서 열기
-          </a>
+          <p className="text-xs text-stone-500">
+            다시 연결을 준비하고 있습니다...
+          </p>
         )}
       </StatusLayout>
     );
@@ -451,23 +422,48 @@ export default function NotionConnectPage() {
   if (uiStatus === "handoff_started") {
     return (
       <StatusLayout
+        step="Notion 연결"
         title={
           connection.loading
             ? "연결 상태 확인 중"
-            : "Safari에서 연결을 진행해 주세요"
+            : "Safari에서 Notion 연결을 진행해 주세요"
         }
         description={
           connection.loading
             ? "Notion 연결 진행 상황을 확인하고 있습니다."
-            : "Safari에서 Notion 계정을 승인한 뒤 데이터베이스까지 선택해야 합니다."
+            : urlCopied
+              ? "Safari 안내 페이지가 열렸습니다. 안내에 따라 주소창에 붙여 넣어 주세요."
+              : "Safari 안내 페이지에서 연결 주소를 복사한 뒤 주소창에 붙여 넣어 주세요."
         }
         hint={
           connection.loading
             ? undefined
-            : "Safari가 열려 있다면 Safari로 돌아가 연결을 계속해 주세요."
+            : "연결이 끝나면 홈 화면 앱 아이콘으로 돌아오세요."
         }
       >
-        {fallbackActions}
+        {!connection.loading && (
+          <div className="space-y-3 w-full">
+            {showSafariGuideFallback &&
+              isIOS() &&
+              safariGuideUrl &&
+              !connection.notionConnected &&
+              !connection.dbConnected && (
+                <a
+                  href={safariGuideUrl}
+                  className="inline-block w-full rounded-md bg-stone-800 px-4 py-2.5 text-sm text-white"
+                >
+                  Safari 안내 다시 열기
+                </a>
+              )}
+            <CopyAuthUrlButton
+              urlCopied={urlCopied}
+              autoCopyFailed={autoCopyFailed}
+              onCopyAuthUrl={() => {
+                void handleCopyAuthUrl();
+              }}
+            />
+          </div>
+        )}
       </StatusLayout>
     );
   }
@@ -475,20 +471,11 @@ export default function NotionConnectPage() {
   if (uiStatus === "notion_authorized") {
     return (
       <StatusLayout
-        step="1단계 완료"
+        step="Notion 계정 연결 완료"
         title="데이터베이스 선택이 남아 있어요"
-        description="Notion 계정은 연결되었습니다. Safari에서 사용할 데이터베이스를 선택해 주세요."
-        hint="데이터베이스 연결 완료 화면이 나타난 뒤 이 앱으로 돌아오세요."
-      >
-        {isIOS() && safariHomeUrl && (
-          <a
-            href={safariHomeUrl}
-            className="inline-block rounded-md bg-stone-800 px-4 py-2 text-sm text-white"
-          >
-            Safari에서 DB 선택 계속하기
-          </a>
-        )}
-      </StatusLayout>
+        description="Notion 계정은 연결됐습니다. Safari로 돌아가 사용할 데이터베이스를 선택해 주세요."
+        hint="데이터베이스 선택을 마친 뒤 홈 화면 앱 아이콘으로 돌아오세요."
+      />
     );
   }
 

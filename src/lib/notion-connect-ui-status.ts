@@ -6,6 +6,8 @@ export type NotionConnectUiStatus =
   | "failed"
   | "expired";
 
+/** starting = connect page initializing; handoff_started = awaiting Safari OAuth */
+
 export function mapConnectionToUiStatus(
   notionConnected: boolean,
   dbConnected: boolean,

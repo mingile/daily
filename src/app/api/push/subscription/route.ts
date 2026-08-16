@@ -118,3 +118,20 @@ export async function POST(req: Request) {
     );
   }
 }
+
+export async function DELETE() {
+  try {
+    const user_key = await resolveUserKey();
+    const db = await getMongoDb();
+
+    await db.collection("push_subscriptions").deleteMany({ user_key });
+
+    return NextResponse.json({ ok: true });
+  } catch (error) {
+    console.error("Push subscription delete failed:", error);
+    return NextResponse.json(
+      { error: "Failed to delete push subscription" },
+      { status: 500 },
+    );
+  }
+}

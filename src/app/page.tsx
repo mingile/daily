@@ -25,6 +25,7 @@ import {
 import {
   beginNotionConnectFlow,
   clearNotionConnectSession,
+  copyNotionHandoffAuthUrl,
   hasNotionConnectPendingFlow,
   startNotionConnectHandoff,
 } from "@/lib/notion-connect-session";
@@ -701,6 +702,7 @@ export default function HomePage() {
       try {
         const handoffId = await startNotionConnectHandoff();
         beginNotionConnectFlow(handoffId);
+        await copyNotionHandoffAuthUrl(handoffId);
         setNotionOauthPending(true);
         window.location.href = `/notion/connect?handoff=${handoffId}`;
       } catch (error) {
@@ -963,10 +965,24 @@ export default function HomePage() {
         )}
 
         {notionOauthPending && useSafariHandoffFlow && (
-          <div className="bg-amber-50 border border-amber-200 text-amber-900 px-4 py-3 rounded-lg text-sm text-center">
-            {notionConnectUiStatus === "notion_authorized"
-              ? "Notion 계정은 연결되었습니다. Safari에서 데이터베이스 선택을 완료한 뒤 이 앱으로 돌아와 주세요."
-              : "Safari에서 Notion 연결을 완료한 뒤 이 앱으로 돌아와 주세요."}
+          <div className="bg-amber-50 border border-amber-200 text-amber-900 px-4 py-3 rounded-lg text-sm text-center space-y-1">
+            {notionConnectUiStatus === "notion_authorized" ? (
+              <p>
+                Notion 계정은 연결됐습니다. Safari로 돌아가 데이터베이스를
+                선택한 뒤 이 앱으로 돌아와 주세요.
+              </p>
+            ) : (
+              <>
+                <p>
+                  Safari 안내에서 연결 주소를 복사한 뒤, Safari{" "}
+                  <strong>주소창</strong>에 붙여 넣어 주세요.
+                </p>
+                <p className="text-xs text-amber-800">
+                  연결 주소를 메모·메시지 링크로 열면 Notion 앱으로 넘어갈 수
+                  있어요.
+                </p>
+              </>
+            )}
           </div>
         )}
 
@@ -975,8 +991,8 @@ export default function HomePage() {
           notionConnectUiStatus === "notion_authorized" &&
           !notionOauthPending && (
             <div className="bg-amber-50 border border-amber-200 text-amber-900 px-4 py-3 rounded-lg text-sm text-center">
-              Notion 계정은 연결되었습니다. Safari에서 데이터베이스 선택을
-              완료해 주세요.
+              Notion 계정은 연결됐습니다. Safari에서 데이터베이스 선택을 마친 뒤
+              이 앱으로 돌아와 주세요.
             </div>
           )}
 
@@ -992,8 +1008,6 @@ export default function HomePage() {
           dinnerMedications={dailyLog.dinnerMedications}
           onMedicationTaken={handleAddMedication}
         />
-
-        <MedicationReminderSettings />
 
         {!notionConnection.loading &&
           notionConnection.notionConnected &&
@@ -1090,6 +1104,8 @@ export default function HomePage() {
             </CardHeader>
           </Card>
         )}
+
+        <MedicationReminderSettings />
 
         {notionConnection.dbConnected && isDailyLogLoading && (
           <div className="text-center py-6">

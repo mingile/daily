@@ -114,6 +114,27 @@ export async function subscribeToPushNotifications(): Promise<PushSubscription> 
   return subscription;
 }
 
+export async function unsubscribeFromPushNotifications(): Promise<void> {
+  if ("serviceWorker" in navigator) {
+    const registration = await navigator.serviceWorker.ready;
+    const subscription = await registration.pushManager.getSubscription();
+
+    if (subscription) {
+      await subscription.unsubscribe();
+    }
+  }
+
+  const response = await fetch("/api/push/subscription", {
+    method: "DELETE",
+    credentials: "include",
+  });
+  const data = (await response.json()) as { ok?: boolean; error?: string };
+
+  if (!response.ok || !data.ok) {
+    throw new Error(data.error ?? "Push Subscription 해제 실패");
+  }
+}
+
 export async function getPushSubscriptionStatus(): Promise<{
   subscribed: boolean;
   endpoint?: string;

@@ -19,6 +19,7 @@ import {
 import {
   getPushSubscriptionStatus,
   subscribeToPushNotifications,
+  unsubscribeFromPushNotifications,
 } from "@/lib/web-push-subscription";
 
 export function MedicationReminderSettings() {
@@ -127,6 +128,23 @@ function MedicationReminderSettingsContent() {
     } catch (err) {
       setError(
         err instanceof Error ? err.message : "알림 구독에 실패했습니다.",
+      );
+    } finally {
+      setPushLoading(false);
+    }
+  };
+
+  const handleUnsubscribePush = async () => {
+    setPushLoading(true);
+    setError("");
+
+    try {
+      await unsubscribeFromPushNotifications();
+      setPushSubscribed(false);
+      showMessage("알림 구독이 해제되었습니다.");
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "알림 해제에 실패했습니다.",
       );
     } finally {
       setPushLoading(false);
@@ -336,48 +354,78 @@ function MedicationReminderSettingsContent() {
   return (
     <Card className="bg-white border-stone-200 shadow-sm">
       <CardHeader className="pb-4">
-        <button
-          type="button"
-          onClick={() => setIsOpen((prev) => !prev)}
-          className="flex w-full items-center justify-between gap-3 text-left"
-          aria-expanded={isOpen}
-        >
-          <div className="space-y-1">
-            <CardTitle className="text-stone-800 text-lg">복약 알림</CardTitle>
+        <div className="flex w-full items-start justify-between gap-3">
+          <div
+            role="button"
+            tabIndex={0}
+            onClick={() => setIsOpen((prev) => !prev)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                setIsOpen((prev) => !prev);
+              }
+            }}
+            className="min-w-0 flex-1 cursor-pointer space-y-1 text-left"
+            aria-expanded={isOpen}
+          >
+            <div className="flex items-center gap-2 flex-wrap">
+              <CardTitle className="text-stone-800 text-lg">복약 알림</CardTitle>
+              {pushSubscribed && (
+                <Badge
+                  asChild
+                  variant="secondary"
+                  className="cursor-pointer bg-green-50 text-green-700 border border-green-200 hover:bg-green-100 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  <button
+                    type="button"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      void handleUnsubscribePush();
+                    }}
+                    disabled={pushLoading}
+                    aria-label="알림 해제"
+                  >
+                    {pushLoading ? "해제 중..." : "허용됨"}
+                  </button>
+                </Badge>
+              )}
+            </div>
             <p className="text-sm text-stone-600">
               매일 정해진 시간에 Push 알림을 받을 수 있습니다.
             </p>
           </div>
-          <ChevronDown
-            className={`h-4 w-4 shrink-0 text-stone-500 transition-transform ${
-              isOpen ? "rotate-180" : ""
-            }`}
-          />
-        </button>
+          <button
+            type="button"
+            onClick={() => setIsOpen((prev) => !prev)}
+            className="shrink-0 rounded-sm p-1 text-stone-500 hover:text-stone-700"
+            aria-expanded={isOpen}
+            aria-label={isOpen ? "복약 알림 접기" : "복약 알림 펼치기"}
+          >
+            <ChevronDown
+              className={`h-4 w-4 transition-transform ${
+                isOpen ? "rotate-180" : ""
+              }`}
+            />
+          </button>
+        </div>
       </CardHeader>
       {isOpen && (
         <CardContent className="space-y-4">
-          <div className="flex items-center justify-between gap-3 rounded-lg border border-stone-200 px-3 py-3">
-            <div className="space-y-1">
-              <p className="text-sm font-medium text-stone-800">Push 알림</p>
-              <p className="text-xs text-stone-500">
-                {pushSubscribed
-                  ? "이 기기에서 알림을 받을 준비가 되었습니다."
-                  : "알림을 받으려면 먼저 구독해 주세요."}
-              </p>
-            </div>
-            <div className="flex items-center gap-2">
-              <Badge
-                variant={pushSubscribed ? "default" : "secondary"}
-                className={
-                  pushSubscribed
-                    ? "bg-green-600 text-white hover:bg-green-700"
-                    : "bg-stone-200 text-stone-600"
-                }
-              >
-                {pushSubscribed ? "구독됨" : "미구독"}
-              </Badge>
-              {!pushSubscribed && (
+          {!pushSubscribed && (
+            <div className="flex items-center justify-between gap-3 rounded-lg border border-stone-200 px-3 py-3">
+              <div className="space-y-1">
+                <p className="text-sm font-medium text-stone-800">Push 알림</p>
+                <p className="text-xs text-stone-500">
+                  알림을 받으려면 먼저 알림을 허용해 주세요.
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <Badge
+                  variant="secondary"
+                  className="bg-stone-200 text-stone-600"
+                >
+                  미허용
+                </Badge>
                 <Button
                   size="sm"
                   onClick={() => {
@@ -386,11 +434,11 @@ function MedicationReminderSettingsContent() {
                   disabled={pushLoading}
                   className="h-8 bg-stone-700 hover:bg-stone-800 text-white"
                 >
-                  {pushLoading ? "구독 중..." : "알림 허용"}
+                  {pushLoading ? "허용 중..." : "알림 허용"}
                 </Button>
-              )}
+              </div>
             </div>
-          </div>
+          )}
 
           {error && (
             <div className="bg-red-50 border border-red-200 text-red-800 px-4 py-3 rounded-lg text-sm">
