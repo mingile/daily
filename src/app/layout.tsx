@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Geist, Geist_Mono, M_PLUS_Rounded_1c } from "next/font/google";
 import { ServiceWorkerRegister } from "@/app/service-worker-register";
 import "./globals.css";
 
@@ -10,6 +10,12 @@ const geistSans = Geist({
 
 const geistMono = Geist_Mono({
   variable: "--font-geist-mono",
+  subsets: ["latin"],
+});
+
+const mPlusRounded = M_PLUS_Rounded_1c({
+  variable: "--font-mplus-rounded",
+  weight: ["400", "500", "700"],
   subsets: ["latin"],
 });
 
@@ -45,7 +51,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      className={`${geistSans.variable} ${geistMono.variable} ${mPlusRounded.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">
         <ServiceWorkerRegister />

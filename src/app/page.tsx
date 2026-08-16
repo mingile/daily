@@ -892,7 +892,9 @@ export default function HomePage() {
     <div key={todayStr} className="min-h-screen bg-[#f5f3ef] py-8 px-4 pb-24">
       <div className="max-w-[480px] mx-auto space-y-6">
         <header className="text-center space-y-3 px-4">
-          <h1 className="text-3xl font-semibold text-stone-800">daily</h1>
+          <h1 className="font-english-title text-3xl font-semibold text-stone-800">
+            daily
+          </h1>
           <p className="text-sm text-stone-600">{dailyLog.date}</p>
 
           <div className="pt-2">
