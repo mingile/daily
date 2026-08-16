@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
+import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -16,7 +17,11 @@ import {
   type DailyState,
   type MealCompletionState,
 } from "@/lib/dailyStateStorage";
-import { isIOS, isIOSSafariBrowser, shouldUseSafariHandoffFlow } from "@/lib/is-standalone-pwa";
+import {
+  isIOS,
+  isIOSSafariBrowser,
+  shouldUseSafariHandoffFlow,
+} from "@/lib/is-standalone-pwa";
 import {
   beginNotionConnectFlow,
   clearNotionConnectSession,
@@ -27,6 +32,7 @@ import {
   isNotionFullyConnected,
   mapConnectionToUiStatus,
 } from "@/lib/notion-connect-ui-status";
+import { MedicationReminderSettings } from "@/components/medication-reminder-settings";
 
 type FoodItem = {
   name: string;
@@ -165,7 +171,8 @@ export default function HomePage() {
   const [dbConnectError, setDbConnectError] = useState("");
   const [notionOauthPending, setNotionOauthPending] = useState(false);
   const [notionOauthError, setNotionOauthError] = useState("");
-  const [showSafariPwaReturnGuide, setShowSafariPwaReturnGuide] = useState(false);
+  const [showSafariPwaReturnGuide, setShowSafariPwaReturnGuide] =
+    useState(false);
   const widgetTokenSentRef = useRef(false);
   const isInitialLoadRef = useRef(true);
 
@@ -597,7 +604,10 @@ export default function HomePage() {
   }, [notionOauthPending, fetchNotionConnection]);
 
   useEffect(() => {
-    if (!notionOauthPending || !isNotionFullyConnected(notionConnection.dbConnected)) {
+    if (
+      !notionOauthPending ||
+      !isNotionFullyConnected(notionConnection.dbConnected)
+    ) {
       return;
     }
 
@@ -967,6 +977,8 @@ export default function HomePage() {
           </div>
         )}
 
+        <MedicationReminderSettings />
+
         {!notionConnection.loading &&
           notionConnection.notionConnected &&
           !notionConnection.dbConnected &&
@@ -1069,6 +1081,46 @@ export default function HomePage() {
             <p className="text-sm text-stone-600">기록을 불러오는 중...</p>
           </div>
         )}
+        <Card
+          className={`border-stone-200 shadow-sm transition-colors ${
+            dailyLog.workout ? "bg-green-50" : "bg-white"
+          }`}
+        >
+          <CardHeader className="pb-4">
+            <div className="flex items-center justify-between gap-3">
+              <CardTitle className="text-stone-800 text-lg">운동</CardTitle>
+              <Link
+                href="/dailyset"
+                className="text-xs text-stone-500 hover:text-stone-700 underline underline-offset-4 shrink-0"
+              >
+                Daily Set
+              </Link>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="flex items-center space-x-3">
+              <Checkbox
+                id="workout"
+                checked={dailyLog.workout}
+                onCheckedChange={(checked) => {
+                  const newWorkout = checked === true;
+                  setDailyLog((prev) => ({
+                    ...prev,
+                    workout: newWorkout,
+                  }));
+                  persistDailyState({ workout: newWorkout });
+                }}
+                className="border-stone-300"
+              />
+              <Label
+                htmlFor="workout"
+                className="text-stone-700 font-normal cursor-pointer"
+              >
+                오늘 운동했어요
+              </Label>
+            </div>
+          </CardContent>
+        </Card>
 
         {(["breakfast", "lunch", "dinner"] as MealType[]).map((mealType) => (
           <MealCard
@@ -1097,39 +1149,6 @@ export default function HomePage() {
           />
         ))}
 
-        <Card
-          className={`border-stone-200 shadow-sm transition-colors ${
-            dailyLog.workout ? "bg-green-50" : "bg-white"
-          }`}
-        >
-          <CardHeader className="pb-4">
-            <CardTitle className="text-stone-800 text-lg">운동</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="flex items-center space-x-3">
-              <Checkbox
-                id="workout"
-                checked={dailyLog.workout}
-                onCheckedChange={(checked) => {
-                  const newWorkout = checked === true;
-                  setDailyLog((prev) => ({
-                    ...prev,
-                    workout: newWorkout,
-                  }));
-                  persistDailyState({ workout: newWorkout });
-                }}
-                className="border-stone-300"
-              />
-              <Label
-                htmlFor="workout"
-                className="text-stone-700 font-normal cursor-pointer"
-              >
-                오늘 운동했어요
-              </Label>
-            </div>
-          </CardContent>
-        </Card>
-
         <Card className="bg-white border-stone-200 shadow-sm">
           <CardHeader className="pb-4">
             <CardTitle className="text-stone-800 text-lg">메모</CardTitle>
@@ -1148,6 +1167,29 @@ export default function HomePage() {
             />
           </CardContent>
         </Card>
+
+        <footer className="pt-2 text-center">
+          <nav
+            aria-label="법적 고지"
+            className="flex items-center justify-center gap-3 text-xs text-stone-400"
+          >
+            <Link
+              href="/termsofservice"
+              className="hover:text-stone-600 transition-colors"
+            >
+              이용약관
+            </Link>
+            <span aria-hidden="true" className="text-stone-300">
+              ·
+            </span>
+            <Link
+              href="/privacy"
+              className="hover:text-stone-600 transition-colors"
+            >
+              개인정보 처리방침
+            </Link>
+          </nav>
+        </footer>
 
         <div className="fixed bottom-0 left-0 right-0 p-4 bg-[#f5f3ef]/95 backdrop-blur-sm border-t border-stone-200">
           <div className="max-w-[480px] mx-auto space-y-3">
