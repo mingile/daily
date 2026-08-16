@@ -2,11 +2,34 @@ export const MEDICATIONS_COLLECTION = "medications";
 export const NOTIFICATION_JOBS_COLLECTION = "notification_jobs";
 export const MEDICATION_LOGS_COLLECTION = "medication_logs";
 
+export const MEDICATION_SCHEDULE_TIMEZONE = "Asia/Seoul";
+
 export type MedicationScheduleRepeat = "daily";
+
+export type MedicationMealSlot = "breakfast" | "lunch" | "dinner";
+
+export const MEDICATION_MEAL_SLOTS: MedicationMealSlot[] = [
+  "breakfast",
+  "lunch",
+  "dinner",
+];
+
+export const MEDICATION_MEAL_SLOT_LABELS: Record<MedicationMealSlot, string> = {
+  breakfast: "아침",
+  lunch: "점심",
+  dinner: "저녁",
+};
 
 export type MedicationSchedule = {
   time: string;
   repeat: MedicationScheduleRepeat;
+  mealSlot: MedicationMealSlot;
+};
+
+export type MedicationScheduleInput = {
+  time: string;
+  repeat: MedicationScheduleRepeat;
+  mealSlot?: MedicationMealSlot;
 };
 
 export type MedicationRecord = {
@@ -44,13 +67,13 @@ export type MedicationLogRecord = {
 
 export type MedicationInput = {
   name: string;
-  schedule: MedicationSchedule;
+  schedule: MedicationScheduleInput;
   enabled?: boolean;
 };
 
 export type MedicationUpdateInput = {
   name?: string;
-  schedule?: MedicationSchedule;
+  schedule?: MedicationScheduleInput;
   enabled?: boolean;
 };
 
@@ -65,14 +88,46 @@ export type MedicationResponse = {
 
 const TIME_PATTERN = /^([01]\d|2[0-3]):([0-5]\d)$/;
 
+export function isValidMedicationMealSlot(
+  mealSlot: string | undefined,
+): mealSlot is MedicationMealSlot {
+  return MEDICATION_MEAL_SLOTS.includes(mealSlot as MedicationMealSlot);
+}
+
+export function inferMealSlotFromTime(time: string): MedicationMealSlot {
+  const hour = parseInt(time.split(":")[0] ?? "0", 10);
+
+  if (hour < 11) {
+    return "breakfast";
+  }
+
+  if (hour < 16) {
+    return "lunch";
+  }
+
+  return "dinner";
+}
+
+export function normalizeMedicationSchedule(
+  schedule: MedicationScheduleInput | MedicationSchedule,
+): MedicationSchedule {
+  return {
+    time: schedule.time,
+    repeat: schedule.repeat,
+    mealSlot: schedule.mealSlot ?? inferMealSlotFromTime(schedule.time),
+  };
+}
+
 export function isValidMedicationSchedule(
-  schedule: MedicationSchedule | undefined,
-): schedule is MedicationSchedule {
+  schedule: MedicationScheduleInput | undefined,
+): schedule is MedicationScheduleInput {
   return !!(
     schedule &&
     typeof schedule.time === "string" &&
     TIME_PATTERN.test(schedule.time) &&
-    schedule.repeat === "daily"
+    schedule.repeat === "daily" &&
+    (schedule.mealSlot === undefined ||
+      isValidMedicationMealSlot(schedule.mealSlot))
   );
 }
 
@@ -114,7 +169,7 @@ export function toMedicationResponse(
   return {
     id: record.medication_id,
     name: record.name,
-    schedule: record.schedule,
+    schedule: normalizeMedicationSchedule(record.schedule),
     enabled: record.enabled,
     createdAt: record.created_at.toISOString(),
     updatedAt: record.updated_at.toISOString(),

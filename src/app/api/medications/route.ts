@@ -65,7 +65,7 @@ export async function POST(req: Request) {
     return NextResponse.json(
       {
         error:
-          "Invalid medication payload. name and schedule.time (HH:mm), schedule.repeat ('daily') are required.",
+          "Invalid medication payload. name, schedule.time (HH:mm), schedule.repeat ('daily'), and optional schedule.mealSlot ('breakfast' | 'lunch' | 'dinner') are required.",
       },
       { status: 400 },
     );

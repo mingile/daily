@@ -33,6 +33,7 @@ import {
   mapConnectionToUiStatus,
 } from "@/lib/notion-connect-ui-status";
 import { MedicationReminderSettings } from "@/components/medication-reminder-settings";
+import { MedicationPendingCard } from "@/components/medication-pending-card";
 
 type FoodItem = {
   name: string;
@@ -655,10 +656,16 @@ export default function HomePage() {
       | "lunchMedications"
       | "dinnerMedications";
 
-    applyDailyLogChange((prev) => ({
-      ...prev,
-      [medicationKey]: [...prev[medicationKey], medication],
-    }));
+    applyDailyLogChange((prev) => {
+      if (prev[medicationKey].includes(medication)) {
+        return prev;
+      }
+
+      return {
+        ...prev,
+        [medicationKey]: [...prev[medicationKey], medication],
+      };
+    });
   };
 
   const handleRemoveMedication = (
@@ -976,6 +983,13 @@ export default function HomePage() {
             {notionOauthError}
           </div>
         )}
+
+        <MedicationPendingCard
+          breakfastMedications={dailyLog.breakfastMedications}
+          lunchMedications={dailyLog.lunchMedications}
+          dinnerMedications={dailyLog.dinnerMedications}
+          onMedicationTaken={handleAddMedication}
+        />
 
         <MedicationReminderSettings />
 

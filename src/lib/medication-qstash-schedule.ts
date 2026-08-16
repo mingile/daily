@@ -6,9 +6,11 @@ import {
 import type {
   MedicationRecord,
   MedicationSchedule,
+  MedicationScheduleInput,
 } from "@/lib/medication-types";
+import { MEDICATION_SCHEDULE_TIMEZONE } from "@/lib/medication-types";
 
-export const MEDICATION_SCHEDULE_TIMEZONE = "Asia/Seoul";
+export { MEDICATION_SCHEDULE_TIMEZONE };
 
 export function buildMedicationScheduleId(medication_id: string): string {
   return `med-${medication_id}`;
@@ -123,7 +125,7 @@ export async function reloadMedicationWithSchedule(
 }
 
 export function shouldSyncMedicationSchedule(patch: {
-  schedule?: MedicationSchedule;
+  schedule?: MedicationScheduleInput;
   enabled?: boolean;
 }): boolean {
   return patch.schedule !== undefined || patch.enabled !== undefined;

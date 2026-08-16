@@ -3,6 +3,7 @@ import {
   MEDICATIONS_COLLECTION,
   MEDICATION_LOGS_COLLECTION,
   NOTIFICATION_JOBS_COLLECTION,
+  normalizeMedicationSchedule,
   type MedicationInput,
   type MedicationLogRecord,
   type MedicationLogStatus,
@@ -22,7 +23,7 @@ export async function createMedication(
     medication_id: crypto.randomUUID(),
     user_key,
     name: input.name.trim(),
-    schedule: input.schedule,
+    schedule: normalizeMedicationSchedule(input.schedule),
     enabled: input.enabled ?? true,
     qstash_schedule_id: null,
     created_at: now,
@@ -74,7 +75,11 @@ export async function updateMedication(
   }
 
   if (input.schedule !== undefined) {
-    updates.schedule = input.schedule;
+    const existing = await getMedication(user_key, medication_id);
+    updates.schedule = normalizeMedicationSchedule({
+      ...existing?.schedule,
+      ...input.schedule,
+    });
   }
 
   if (input.enabled !== undefined) {
